@@ -1,0 +1,74 @@
+package view
+
+import (
+	"fmt"
+	"github.com/stitchmap/stitchmap/internal/model"
+)
+
+type DashboardData struct {
+	Email    string
+	Patterns []model.Pattern
+}
+
+templ DashboardPage(data DashboardData) {
+	@Layout(LayoutData{Title: "Dashboard", IsLoggedIn: true, UserEmail: data.Email}) {
+		<div class="level">
+			<div class="level-left">
+				<div class="level-item">
+					<h1 class="title">My Patterns</h1>
+				</div>
+			</div>
+			<div class="level-right">
+				<div class="level-item">
+					<a class="button is-primary" href="/patterns/new">New Pattern</a>
+				</div>
+				<div class="level-item">
+					<a class="button is-link is-outlined" href="/stitches">Manage Stitches</a>
+				</div>
+			</div>
+		</div>
+		if len(data.Patterns) == 0 {
+			<div class="box has-text-centered">
+				<p class="has-text-grey mb-4">You don't have any patterns yet.</p>
+				<a class="button is-primary" href="/patterns/new">Create your first pattern</a>
+			</div>
+		} else {
+			<div class="columns is-multiline">
+				for _, p := range data.Patterns {
+					<div class="column is-4">
+						@PatternCard(p)
+					</div>
+				}
+			</div>
+		}
+	}
+}
+
+templ PatternCard(p model.Pattern) {
+	<div class="card">
+		<div class="card-content">
+			<p class="title is-5">
+				<a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", p.ID)) }>{ p.Name }</a>
+			</p>
+			if p.Description != "" {
+				<p class="subtitle is-6 has-text-grey">{ p.Description }</p>
+			}
+			<div class="tags">
+				<span class="tag is-info is-light">{ fmt.Sprintf("%d sections", p.SectionCount) }</span>
+				<span class="tag is-link is-light">{ fmt.Sprintf("%d rows/rounds", p.RowCount) }</span>
+			</div>
+			<p class="is-size-7 has-text-grey">
+				Updated { p.UpdatedAt.Format("Jan 2, 2006") }
+			</p>
+		</div>
+		<footer class="card-footer">
+			<a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", p.ID)) } class="card-footer-item">Edit</a>
+			<a
+				class="card-footer-item has-text-danger"
+				data-on-click={ fmt.Sprintf("@delete('/patterns/%d')", p.ID) }
+			>
+				Delete
+			</a>
+		</footer>
+	</div>
+}

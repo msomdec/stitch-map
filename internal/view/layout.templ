@@ -1,0 +1,55 @@
+package view
+
+type LayoutData struct {
+	Title       string
+	IsLoggedIn  bool
+	UserEmail   string
+}
+
+templ Layout(data LayoutData) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>
+				if data.Title != "" {
+					{ data.Title } — StitchMap
+				} else {
+					StitchMap
+				}
+			</title>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css"/>
+			<script type="module" src="https://cdn.jsdelivr.net/npm/@starfederation/datastar@1"></script>
+		</head>
+		<body>
+			<nav class="navbar is-primary" role="navigation" aria-label="main navigation">
+				<div class="navbar-brand">
+					<a class="navbar-item has-text-weight-bold" href="/">StitchMap</a>
+				</div>
+				<div class="navbar-end">
+					<div class="navbar-item">
+						if data.IsLoggedIn {
+							<div class="buttons">
+								<span class="navbar-item">{ data.UserEmail }</span>
+								<form method="POST" action="/logout">
+									<button class="button is-light" type="submit">Log out</button>
+								</form>
+							</div>
+						} else {
+							<div class="buttons">
+								<a class="button is-light" href="/login">Log in</a>
+								<a class="button is-white" href="/register">Register</a>
+							</div>
+						}
+					</div>
+				</div>
+			</nav>
+			<section class="section">
+				<div class="container">
+					{ children... }
+				</div>
+			</section>
+		</body>
+	</html>
+}

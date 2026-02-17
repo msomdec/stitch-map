@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:data-star.dev)",
+      "WebFetch(domain:templ.guide)",
+      "Bash(go mod init:*)",
+      "Bash(go get:*)",
+      "Bash(go install:*)",
+      "Bash(templ generate:*)",
+      "Bash(go build:*)",
+      "Bash(timeout:*)",
+      "Bash(sqlite3:*)",
+      "Bash(go mod tidy:*)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(kill:*)",
+      "Bash(wait)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}

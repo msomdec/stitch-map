@@ -1,0 +1,148 @@
+package view
+
+import (
+	"fmt"
+	"github.com/stitchmap/stitchmap/internal/model"
+)
+
+type StitchPageData struct {
+	Stitches []model.Stitch
+	Error    string
+}
+
+templ StitchPage(data StitchPageData, email string) {
+	@Layout(LayoutData{Title: "Stitches", IsLoggedIn: true, UserEmail: email}) {
+		<h1 class="title">Stitches</h1>
+		<p class="subtitle">Manage your stitch library</p>
+		if data.Error != "" {
+			<div class="notification is-danger" id="stitch-error">{ data.Error }</div>
+		}
+		<div class="columns">
+			<div class="column is-8">
+				<div id="stitch-list">
+					@StitchList(data.Stitches)
+				</div>
+			</div>
+			<div class="column is-4">
+				<div id="stitch-form-container">
+					@StitchForm(nil)
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ StitchList(stitches []model.Stitch) {
+	<table class="table is-fullwidth is-striped">
+		<thead>
+			<tr>
+				<th>Name</th>
+				<th>Abbreviation</th>
+				<th>Description</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody id="stitch-table-body">
+			for _, s := range stitches {
+				@StitchRow(s)
+			}
+		</tbody>
+	</table>
+}
+
+templ StitchRow(s model.Stitch) {
+	<tr id={ fmt.Sprintf("stitch-%d", s.ID) }>
+		<td>{ s.Name }</td>
+		<td><code>{ s.Abbreviation }</code></td>
+		<td>{ s.Description }</td>
+		<td>
+			if !s.IsBuiltin {
+				<div class="buttons are-small">
+					<button
+						class="button is-info is-outlined"
+						data-on-click={ fmt.Sprintf("@get('/stitches/%d/edit')", s.ID) }
+					>
+						Edit
+					</button>
+					<button
+						class="button is-danger is-outlined"
+						data-on-click={ fmt.Sprintf("@delete('/stitches/%d')", s.ID) }
+					>
+						Delete
+					</button>
+				</div>
+			} else {
+				<span class="tag is-light">Built-in</span>
+			}
+		</td>
+	</tr>
+}
+
+templ StitchForm(s *model.Stitch) {
+	<div class="box" id="stitch-form-container">
+		if s != nil {
+			<h2 class="title is-5">Edit Stitch</h2>
+		} else {
+			<h2 class="title is-5">Add Custom Stitch</h2>
+		}
+		<div
+			if s != nil {
+				data-signals={ fmt.Sprintf(`{"stitchName":"%s","stitchAbbr":"%s","stitchDesc":"%s"}`, s.Name, s.Abbreviation, s.Description) }
+			} else {
+				data-signals={`{"stitchName":"","stitchAbbr":"","stitchDesc":""}`}
+			}
+		>
+			<div class="field">
+				<label class="label" for="stitch-name">Name</label>
+				<div class="control">
+					<input class="input" type="text" id="stitch-name" data-bind-stitchName placeholder="e.g. Bobble Stitch"/>
+				</div>
+			</div>
+			<div class="field">
+				<label class="label" for="stitch-abbr">Abbreviation</label>
+				<div class="control">
+					<input class="input" type="text" id="stitch-abbr" data-bind-stitchAbbr placeholder="e.g. bob"/>
+				</div>
+			</div>
+			<div class="field">
+				<label class="label" for="stitch-desc">Description</label>
+				<div class="control">
+					<textarea class="textarea" id="stitch-desc" data-bind-stitchDesc rows="2" placeholder="Optional description"></textarea>
+				</div>
+			</div>
+			<div class="field is-grouped">
+				if s != nil {
+					<div class="control">
+						<button
+							class="button is-primary"
+							data-on-click={ fmt.Sprintf("@put('/stitches/%d')", s.ID) }
+						>
+							Save
+						</button>
+					</div>
+					<div class="control">
+						<button
+							class="button is-light"
+							data-on-click="@get('/stitches/new')"
+						>
+							Cancel
+						</button>
+					</div>
+				} else {
+					<div class="control">
+						<button
+							class="button is-primary"
+							data-on-click="@post('/stitches')"
+						>
+							Add Stitch
+						</button>
+					</div>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ StitchError(msg string) {
+	<div class="notification is-danger" id="stitch-error">{ msg }</div>
+}
