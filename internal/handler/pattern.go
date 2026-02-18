@@ -603,17 +603,18 @@ func RowsRefresh(db *sql.DB) http.HandlerFunc {
 // --- Helpers ---
 
 func refreshPatternSections(sse *datastar.ServerSentEventGenerator, db *sql.DB, patternID int64) {
-	sections, _ := model.ListSectionsByPattern(db, patternID)
-	for i := range sections {
-		rows, _ := model.ListRowsBySection(db, sections[i].ID)
-		sections[i].Rows = rows
-	}
+	_, sections, _ := model.LoadPatternFull(db, patternID)
 	sse.PatchElementTempl(view.PatternSections(patternID, sections), datastar.WithSelectorID("pattern-content"), datastar.WithModeInner())
+	sse.PatchElementTempl(view.PatternSummaryBlock(sections), datastar.WithSelectorID("pattern-summary"))
 	sse.RemoveElementByID("pattern-error")
 }
 
 func refreshSectionRows(sse *datastar.ServerSentEventGenerator, db *sql.DB, sectionID int64) {
 	rows, _ := model.ListRowsBySection(db, sectionID)
+	for i := range rows {
+		instructions, _ := model.ListInstructionsForRow(db, rows[i].ID)
+		rows[i].Instructions = instructions
+	}
 	sse.PatchElementTempl(view.RowList(sectionID, rows), datastar.WithSelectorID("section-"+strconv.FormatInt(sectionID, 10)+"-rows"), datastar.WithModeInner())
 	sse.RemoveElementByID("pattern-error")
 }

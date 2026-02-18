@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -26,17 +27,35 @@ type PatternSection struct {
 	Rows      []Row // populated when loading full pattern
 }
 
+// RowAutoLabel returns the display label for a row, auto-generating if Label is empty.
+// rowIndex is 0-based within its section; totalRows is used for range labels on repeated rows.
+func RowAutoLabel(r Row, rowIndex int, totalRows int) string {
+	if r.Label != "" {
+		return r.Label
+	}
+	n := rowIndex + 1
+	prefix := "Row"
+	if r.Type == "joined_round" || r.Type == "continuous_round" {
+		prefix = "Rnd"
+	}
+	if r.RepeatCount > 1 {
+		return fmt.Sprintf("%ss %d-%d", prefix, n, n+r.RepeatCount-1)
+	}
+	return fmt.Sprintf("%s %d", prefix, n)
+}
+
 type Row struct {
-	ID                        int64
-	SectionID                 int64
-	Position                  int
-	Label                     string
-	Type                      string // "row", "joined_round", "continuous_round"
-	ExpectedStitchCount       int
-	TurningChainCount         int
+	ID                         int64
+	SectionID                  int64
+	Position                   int
+	Label                      string
+	Type                       string // "row", "joined_round", "continuous_round"
+	ExpectedStitchCount        int
+	TurningChainCount          int
 	TurningChainCountsAsStitch bool
-	RepeatCount               int
-	Notes                     string
+	RepeatCount                int
+	Notes                      string
+	Instructions               []RowInstruction // populated when loading full pattern
 }
 
 // --- Pattern CRUD ---
@@ -543,7 +562,7 @@ func swapRowPosition(db *sql.DB, id int64, delta int) error {
 	return tx.Commit()
 }
 
-// LoadPatternFull loads a pattern with all its sections and rows.
+// LoadPatternFull loads a pattern with all its sections, rows, and instructions.
 func LoadPatternFull(db *sql.DB, patternID int64) (*Pattern, []PatternSection, error) {
 	pattern, err := FindPatternByID(db, patternID)
 	if err != nil {
@@ -559,6 +578,13 @@ func LoadPatternFull(db *sql.DB, patternID int64) (*Pattern, []PatternSection, e
 		sectionRows, err := ListRowsBySection(db, sections[i].ID)
 		if err != nil {
 			return nil, nil, err
+		}
+		for j := range sectionRows {
+			instructions, err := ListInstructionsForRow(db, sectionRows[j].ID)
+			if err != nil {
+				return nil, nil, err
+			}
+			sectionRows[j].Instructions = instructions
 		}
 		sections[i].Rows = sectionRows
 	}
@@ -582,4 +608,110 @@ func GetPatternIDForRow(db *sql.DB, rowID int64) (int64, error) {
 		WHERE r.id = ?
 	`, rowID).Scan(&patternID)
 	return patternID, err
+}
+
+// --- Pattern Summary Rendering ---
+
+// RenderPatternSummary produces a human-readable crochet pattern from sections/rows/instructions.
+// The sections must have their Rows populated, and each Row must have Instructions populated.
+func RenderPatternSummary(sections []PatternSection) string {
+	var sb strings.Builder
+	for si, section := range sections {
+		if si > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(section.Name)
+		sb.WriteString("\n")
+
+		// Track running row number for auto-labeling (resets per section).
+		rowNum := 1
+		for _, row := range section.Rows {
+			label := row.Label
+			if label == "" {
+				prefix := "Row"
+				if row.Type == "joined_round" || row.Type == "continuous_round" {
+					prefix = "Rnd"
+				}
+				if row.RepeatCount > 1 {
+					label = fmt.Sprintf("%ss %d-%d", prefix, rowNum, rowNum+row.RepeatCount-1)
+				} else {
+					label = fmt.Sprintf("%s %d", prefix, rowNum)
+				}
+			}
+			rowNum += row.RepeatCount
+
+			sb.WriteString("  ")
+			sb.WriteString(label)
+			sb.WriteString(": ")
+
+			instrText := renderInstructions(row.Instructions)
+			sb.WriteString(instrText)
+
+			// Append stitch count.
+			sb.WriteString(fmt.Sprintf(" [%d]", row.ExpectedStitchCount))
+
+			if row.Notes != "" {
+				sb.WriteString(" (")
+				sb.WriteString(row.Notes)
+				sb.WriteString(")")
+			}
+			sb.WriteString("\n")
+		}
+
+		if section.Notes != "" {
+			sb.WriteString("  Note: ")
+			sb.WriteString(section.Notes)
+			sb.WriteString("\n")
+		}
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+// renderInstructions converts a flat+nested instruction list to crochet notation text.
+func renderInstructions(instructions []RowInstruction) string {
+	parts := make([]string, 0, len(instructions))
+	for _, ri := range instructions {
+		parts = append(parts, renderInstruction(ri))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// renderInstruction converts a single instruction (possibly a group) to crochet notation.
+func renderInstruction(ri RowInstruction) string {
+	if ri.IsGroup {
+		childParts := make([]string, 0, len(ri.Children))
+		for _, ch := range ri.Children {
+			childParts = append(childParts, renderInstruction(ch))
+		}
+		inner := strings.Join(childParts, ", ")
+		if ri.GroupRepeat > 1 {
+			return fmt.Sprintf("(%s) x%d", inner, ri.GroupRepeat)
+		}
+		return fmt.Sprintf("(%s)", inner)
+	}
+
+	abbr := ri.StitchAbbr
+	if abbr == "" {
+		abbr = "?"
+	}
+
+	var sb strings.Builder
+	if ri.Count > 1 {
+		sb.WriteString(fmt.Sprintf("%s %d", abbr, ri.Count))
+	} else {
+		sb.WriteString(abbr)
+	}
+
+	if ri.Into != "" {
+		sb.WriteString(" in ")
+		sb.WriteString(ri.Into)
+	}
+
+	if ri.Note != "" {
+		sb.WriteString(" (")
+		sb.WriteString(ri.Note)
+		sb.WriteString(")")
+	}
+
+	return sb.String()
 }

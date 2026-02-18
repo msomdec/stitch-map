@@ -16,7 +16,11 @@
       "WebFetch(domain:github.com)",
       "Bash(kill:*)",
       "Bash(wait)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(node -e:*)",
+      "Bash(go generate:*)"
     ]
   }
 }

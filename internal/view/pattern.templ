@@ -5,6 +5,37 @@ import (
 	"github.com/stitchmap/stitchmap/internal/model"
 )
 
+// --- Plain Go helpers used in templates ---
+
+func instrDisplayText(ri model.RowInstruction) string {
+	abbr := ri.StitchAbbr
+	if abbr == "" {
+		abbr = "?"
+	}
+	s := abbr
+	if ri.Count > 1 {
+		s = fmt.Sprintf("%s ×%d", abbr, ri.Count)
+	}
+	if ri.Into != "" {
+		s += " in " + ri.Into
+	}
+	return s
+}
+
+func firstStitchIDStr(stitches []model.Stitch) string {
+	if len(stitches) > 0 {
+		return fmt.Sprintf("%d", stitches[0].ID)
+	}
+	return ""
+}
+
+func instrStitchIDStr(ri *model.RowInstruction) string {
+	if ri.StitchID != nil {
+		return fmt.Sprintf("%d", *ri.StitchID)
+	}
+	return ""
+}
+
 // --- New Pattern Page ---
 
 templ NewPatternPage(email string, err string) {
@@ -86,6 +117,9 @@ templ PatternDetailPage(data PatternDetailData) {
 		}
 		<div id="pattern-content">
 			@PatternSections(data.Pattern.ID, data.Sections)
+		</div>
+		<div class="mt-4">
+			@PatternSummaryBlock(data.Sections)
 		</div>
 	}
 }
@@ -269,6 +303,7 @@ templ RowList(sectionID int64, rows []model.Row) {
 			<tbody>
 				for _, r := range rows {
 					@RowTableRow(r, len(rows))
+					@RowInstructionRow(r)
 				}
 			</tbody>
 		</table>
@@ -535,4 +570,343 @@ templ EditRowForm(r *model.Row) {
 
 templ PatternError(msg string) {
 	<div class="notification is-danger" id="pattern-error">{ msg }</div>
+}
+
+// --- Instruction panel (sub-row in the rows table) ---
+
+templ RowInstructionRow(r model.Row) {
+	<tr id={ fmt.Sprintf("row-%d-instr-panel", r.ID) }>
+		<td colspan="7" class="p-0">
+			<details open>
+				<summary
+					class="px-3 py-1 is-size-7 has-text-grey-dark"
+					style="list-style:none;cursor:pointer;border-top:1px solid #f0f0f0;background:#fafafa;user-select:none"
+				>
+					&#x2699;&#xFE0E; Stitches
+					if len(r.Instructions) > 0 {
+						<span class="tag is-small is-light ml-1">{ fmt.Sprintf("%d", len(r.Instructions)) }</span>
+					}
+				</summary>
+				<div class="px-4 py-2" style="background:#fafafa">
+					<div id={ fmt.Sprintf("row-%d-instructions", r.ID) }>
+						@InstructionListContent(r.ID, r.Instructions)
+					</div>
+					<div id={ fmt.Sprintf("row-%d-add-instr", r.ID) }>
+						@AddInstructionArea(r.ID)
+					</div>
+				</div>
+			</details>
+		</td>
+	</tr>
+}
+
+// InstructionListContent renders the ordered list of instructions for a row.
+// It is replaced in-place by SSE after add/edit/delete.
+templ InstructionListContent(rowID int64, instructions []model.RowInstruction) {
+	if len(instructions) == 0 {
+		<p class="has-text-grey is-size-7 mb-1">No stitches yet.</p>
+	} else {
+		<div class="mb-2">
+			for i, ri := range instructions {
+				@InstructionItem(ri, i, len(instructions))
+			}
+		</div>
+	}
+}
+
+templ InstructionItem(ri model.RowInstruction, index int, total int) {
+	if ri.IsGroup {
+		<div class="mb-1" id={ fmt.Sprintf("instruction-%d", ri.ID) }>
+			<div class="is-flex is-align-items-center is-flex-wrap-wrap">
+				<span class="tag is-warning is-light mr-2">
+					if ri.GroupRepeat > 1 {
+						{ fmt.Sprintf("( group ) ×%d", ri.GroupRepeat) }
+					} else {
+						( group )
+					}
+				</span>
+				if ri.Note != "" {
+					<span class="is-size-7 has-text-grey mr-2">{ ri.Note }</span>
+				}
+				<div class="buttons are-small mb-0">
+					if index > 0 {
+						<button class="button is-light" data-on-click={ fmt.Sprintf("@post('/instructions/%d/move-up')", ri.ID) } title="Move up">&#x25B2;</button>
+					}
+					if index < total-1 {
+						<button class="button is-light" data-on-click={ fmt.Sprintf("@post('/instructions/%d/move-down')", ri.ID) } title="Move down">&#x25BC;</button>
+					}
+					<button class="button is-info is-outlined" data-on-click={ fmt.Sprintf("@get('/instructions/%d/edit')", ri.ID) }>Edit</button>
+					<button class="button is-danger is-outlined" data-on-click={ fmt.Sprintf("@delete('/instructions/%d')", ri.ID) }>Del</button>
+				</div>
+			</div>
+			<div class="ml-4 mt-1">
+				for j, child := range ri.Children {
+					@InstructionItem(child, j, len(ri.Children))
+				}
+				<div id={ fmt.Sprintf("group-%d-add-child", ri.ID) } class="mt-1">
+					@AddChildInstructionArea(ri.ID)
+				</div>
+			</div>
+		</div>
+	} else {
+		<div class="is-flex is-align-items-center is-flex-wrap-wrap mb-1" id={ fmt.Sprintf("instruction-%d", ri.ID) }>
+			<span class="tag is-light mr-2">{ instrDisplayText(ri) }</span>
+			if ri.Note != "" {
+				<span class="is-size-7 has-text-grey mr-2">{ ri.Note }</span>
+			}
+			<div class="buttons are-small mb-0">
+				if index > 0 {
+					<button class="button is-light" data-on-click={ fmt.Sprintf("@post('/instructions/%d/move-up')", ri.ID) } title="Move up">&#x25B2;</button>
+				}
+				if index < total-1 {
+					<button class="button is-light" data-on-click={ fmt.Sprintf("@post('/instructions/%d/move-down')", ri.ID) } title="Move down">&#x25BC;</button>
+				}
+				<button class="button is-info is-outlined" data-on-click={ fmt.Sprintf("@get('/instructions/%d/edit')", ri.ID) }>Edit</button>
+				<button class="button is-danger is-outlined" data-on-click={ fmt.Sprintf("@delete('/instructions/%d')", ri.ID) }>Del</button>
+			</div>
+		</div>
+	}
+}
+
+// AddInstructionArea shows the "Add Stitch" / "Add Group" buttons (default state).
+templ AddInstructionArea(rowID int64) {
+	<div class="buttons are-small mt-1">
+		<button
+			class="button is-primary is-outlined is-small"
+			data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions/new')", rowID) }
+		>
+			+ Add Stitch
+		</button>
+		<button
+			class="button is-warning is-outlined is-small"
+			data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions/group/new')", rowID) }
+		>
+			+ Add Group
+		</button>
+	</div>
+}
+
+// AddChildInstructionArea shows the button to add a stitch inside a group.
+templ AddChildInstructionArea(parentID int64) {
+	<button
+		class="button is-primary is-outlined is-small"
+		data-on-click={ fmt.Sprintf("@get('/instructions/%d/children/new')", parentID) }
+	>
+		+ Add Stitch to Group
+	</button>
+}
+
+// --- Stitch select and into select helpers ---
+
+templ StitchSelectWidget(stitches []model.Stitch, signal string) {
+	<div class="select is-small">
+		<select data-bind={ signal }>
+			for _, s := range stitches {
+				<option value={ fmt.Sprintf("%d", s.ID) }>{ s.Abbreviation } — { s.Name }</option>
+			}
+		</select>
+	</div>
+}
+
+templ IntoSelectWidget(signal string) {
+	<div class="select is-small">
+		<select data-bind={ signal }>
+			<option value="">—</option>
+			<option value="next st">next st</option>
+			<option value="same st">same st</option>
+			<option value="FLO">FLO</option>
+			<option value="BLO">BLO</option>
+			<option value="ch-sp">ch-sp</option>
+		</select>
+	</div>
+}
+
+// --- Add instruction form (replaces add-instr area) ---
+
+templ AddInstructionForm(rowID int64, stitches []model.Stitch) {
+	<div
+		id={ fmt.Sprintf("row-%d-add-instr", rowID) }
+		data-signals={ fmt.Sprintf(`{"addInstrStitchID":"%s","addInstrCount":"1","addInstrInto":"","addInstrNote":""}`, firstStitchIDStr(stitches)) }
+	>
+		<div class="columns is-mobile is-variable is-1 is-vcentered">
+			<div class="column is-narrow">
+				<label class="label is-small">Stitch</label>
+				@StitchSelectWidget(stitches, "addInstrStitchID")
+			</div>
+			<div class="column is-narrow">
+				<label class="label is-small">Count</label>
+				<input class="input is-small" type="number" data-bind-addInstrCount min="1" style="width:5em"/>
+			</div>
+			<div class="column is-narrow">
+				<label class="label is-small">Into</label>
+				@IntoSelectWidget("addInstrInto")
+			</div>
+			<div class="column">
+				<label class="label is-small">Note</label>
+				<input class="input is-small" type="text" data-bind-addInstrNote placeholder="Optional"/>
+			</div>
+			<div class="column is-narrow">
+				<label class="label is-small">&nbsp;</label>
+				<div class="buttons are-small">
+					<button
+						class="button is-primary is-small"
+						data-on-click={ fmt.Sprintf("@post('/rows/%d/instructions')", rowID) }
+					>Add</button>
+					<button
+						class="button is-light is-small"
+						data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions-refresh')", rowID) }
+					>Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// AddGroupForm (replaces add-instr area)
+templ AddGroupForm(rowID int64) {
+	<div
+		id={ fmt.Sprintf("row-%d-add-instr", rowID) }
+		data-signals={`{"addGrpRepeat":"2","addGrpNote":""}`}
+	>
+		<div class="columns is-mobile is-variable is-1 is-vcentered">
+			<div class="column is-narrow">
+				<label class="label is-small">Repeat ×</label>
+				<input class="input is-small" type="number" data-bind-addGrpRepeat min="1" style="width:5em"/>
+			</div>
+			<div class="column">
+				<label class="label is-small">Note</label>
+				<input class="input is-small" type="text" data-bind-addGrpNote placeholder="Optional"/>
+			</div>
+			<div class="column is-narrow">
+				<label class="label is-small">&nbsp;</label>
+				<div class="buttons are-small">
+					<button
+						class="button is-warning is-small"
+						data-on-click={ fmt.Sprintf("@post('/rows/%d/instructions/group')", rowID) }
+					>Add Group</button>
+					<button
+						class="button is-light is-small"
+						data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions-refresh')", rowID) }
+					>Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// AddChildInstructionForm (replaces group-{parentID}-add-child)
+templ AddChildInstructionForm(parentID, rowID int64, stitches []model.Stitch) {
+	<div
+		id={ fmt.Sprintf("group-%d-add-child", parentID) }
+		data-signals={ fmt.Sprintf(`{"childInstrStitchID":"%s","childInstrCount":"1","childInstrInto":"","childInstrNote":""}`, firstStitchIDStr(stitches)) }
+	>
+		<div class="columns is-mobile is-variable is-1 is-vcentered">
+			<div class="column is-narrow">
+				@StitchSelectWidget(stitches, "childInstrStitchID")
+			</div>
+			<div class="column is-narrow">
+				<input class="input is-small" type="number" data-bind-childInstrCount min="1" style="width:5em"/>
+			</div>
+			<div class="column is-narrow">
+				@IntoSelectWidget("childInstrInto")
+			</div>
+			<div class="column">
+				<input class="input is-small" type="text" data-bind-childInstrNote placeholder="Note"/>
+			</div>
+			<div class="column is-narrow">
+				<div class="buttons are-small">
+					<button
+						class="button is-primary is-small"
+						data-on-click={ fmt.Sprintf("@post('/instructions/%d/children')", parentID) }
+					>Add</button>
+					<button
+						class="button is-light is-small"
+						data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions-refresh')", rowID) }
+					>Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// EditInstructionForm (replaces instruction-{id})
+templ EditInstructionForm(ri *model.RowInstruction, stitches []model.Stitch) {
+	<div
+		class="is-flex is-align-items-center is-flex-wrap-wrap"
+		id={ fmt.Sprintf("instruction-%d", ri.ID) }
+		data-signals={ fmt.Sprintf(`{"editInstrStitchID":"%s","editInstrCount":"%d","editInstrInto":"%s","editInstrNote":"%s"}`,
+			instrStitchIDStr(ri), ri.Count, ri.Into, ri.Note) }
+	>
+		<div class="columns is-mobile is-variable is-1 is-vcentered" style="width:100%">
+			<div class="column is-narrow">
+				@StitchSelectWidget(stitches, "editInstrStitchID")
+			</div>
+			<div class="column is-narrow">
+				<input class="input is-small" type="number" data-bind-editInstrCount min="1" style="width:5em"/>
+			</div>
+			<div class="column is-narrow">
+				@IntoSelectWidget("editInstrInto")
+			</div>
+			<div class="column">
+				<input class="input is-small" type="text" data-bind-editInstrNote/>
+			</div>
+			<div class="column is-narrow">
+				<div class="buttons are-small">
+					<button
+						class="button is-primary is-small"
+						data-on-click={ fmt.Sprintf("@put('/instructions/%d')", ri.ID) }
+					>Save</button>
+					<button
+						class="button is-light is-small"
+						data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions-refresh')", ri.RowID) }
+					>Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// EditGroupForm (replaces instruction-{id})
+templ EditGroupForm(ri *model.RowInstruction) {
+	<div
+		id={ fmt.Sprintf("instruction-%d", ri.ID) }
+		data-signals={ fmt.Sprintf(`{"editGrpRepeat":"%d","editGrpNote":"%s"}`, ri.GroupRepeat, ri.Note) }
+	>
+		<div class="columns is-mobile is-variable is-1 is-vcentered">
+			<div class="column is-narrow">
+				<label class="label is-small">Repeat ×</label>
+				<input class="input is-small" type="number" data-bind-editGrpRepeat min="1" style="width:5em"/>
+			</div>
+			<div class="column">
+				<label class="label is-small">Note</label>
+				<input class="input is-small" type="text" data-bind-editGrpNote/>
+			</div>
+			<div class="column is-narrow">
+				<label class="label is-small">&nbsp;</label>
+				<div class="buttons are-small">
+					<button
+						class="button is-primary is-small"
+						data-on-click={ fmt.Sprintf("@put('/instructions/%d')", ri.ID) }
+					>Save</button>
+					<button
+						class="button is-light is-small"
+						data-on-click={ fmt.Sprintf("@get('/rows/%d/instructions-refresh')", ri.RowID) }
+					>Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// --- Pattern Summary ---
+
+templ PatternSummaryBlock(sections []model.PatternSection) {
+	<div id="pattern-summary" class="box">
+		<h3 class="title is-6">Pattern Preview</h3>
+		if model.RenderPatternSummary(sections) == "" {
+			<p class="has-text-grey is-size-7">Add stitches to rows to see the pattern preview.</p>
+		} else {
+			<pre style="white-space:pre-wrap;font-family:monospace;font-size:0.875em;background:#f5f5f5;padding:1rem;border-radius:4px;overflow-x:auto">{ model.RenderPatternSummary(sections) }</pre>
+		}
+	</div>
 }

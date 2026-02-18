@@ -83,6 +83,20 @@ func main() {
 	authed.HandleFunc("POST /rows/{id}/move-up", handler.RowMoveUp(db))
 	authed.HandleFunc("POST /rows/{id}/move-down", handler.RowMoveDown(db))
 
+	// Instruction routes.
+	authed.HandleFunc("GET /rows/{id}/instructions/new", handler.InstructionNewForm(db))
+	authed.HandleFunc("GET /rows/{id}/instructions/group/new", handler.InstructionGroupNewForm(db))
+	authed.HandleFunc("GET /rows/{id}/instructions-refresh", handler.InstructionsRefresh(db))
+	authed.HandleFunc("POST /rows/{id}/instructions", handler.InstructionCreate(db))
+	authed.HandleFunc("POST /rows/{id}/instructions/group", handler.InstructionGroupCreate(db))
+	authed.HandleFunc("GET /instructions/{id}/edit", handler.InstructionEditForm(db))
+	authed.HandleFunc("GET /instructions/{id}/children/new", handler.InstructionChildNewForm(db))
+	authed.HandleFunc("POST /instructions/{id}/children", handler.InstructionChildCreate(db))
+	authed.HandleFunc("PUT /instructions/{id}", handler.InstructionUpdate(db))
+	authed.HandleFunc("DELETE /instructions/{id}", handler.InstructionDelete(db))
+	authed.HandleFunc("POST /instructions/{id}/move-up", handler.InstructionMoveUp(db))
+	authed.HandleFunc("POST /instructions/{id}/move-down", handler.InstructionMoveDown(db))
+
 	mux.Handle("/", handler.RequireAuth(db, authed))
 
 	fmt.Printf("StitchMap listening on %s\n", *addr)
