@@ -18,9 +18,11 @@ func Dashboard(db *sql.DB) http.HandlerFunc {
 		}
 
 		patterns, _ := model.ListPatternsByUser(db, user.ID)
+		sessions, _ := model.ListSessionSummaries(db, user.ID)
 		renderTempl(w, r, http.StatusOK, view.DashboardPage(view.DashboardData{
 			Email:    user.Email,
 			Patterns: patterns,
+			Sessions: sessions,
 		}))
 	}
 }

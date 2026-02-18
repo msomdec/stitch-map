@@ -8,6 +8,7 @@ import (
 type DashboardData struct {
 	Email    string
 	Patterns []model.Pattern
+	Sessions []model.SessionSummary
 }
 
 templ DashboardPage(data DashboardData) {
@@ -27,6 +28,16 @@ templ DashboardPage(data DashboardData) {
 				</div>
 			</div>
 		</div>
+		if len(data.Sessions) > 0 {
+			<h2 class="title is-5 mb-3">In Progress</h2>
+			<div class="columns is-multiline mb-5">
+				for _, s := range data.Sessions {
+					<div class="column is-6">
+						@SessionCard(s)
+					</div>
+				}
+			</div>
+		}
 		if len(data.Patterns) == 0 {
 			<div class="box has-text-centered">
 				<p class="has-text-grey mb-4">You don't have any patterns yet.</p>
@@ -62,6 +73,7 @@ templ PatternCard(p model.Pattern) {
 			</p>
 		</div>
 		<footer class="card-footer">
+			<a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d/work", p.ID)) } class="card-footer-item has-text-primary">Start</a>
 			<a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", p.ID)) } class="card-footer-item">Edit</a>
 			<a
 				class="card-footer-item has-text-danger"
@@ -70,5 +82,30 @@ templ PatternCard(p model.Pattern) {
 				Delete
 			</a>
 		</footer>
+	</div>
+}
+
+templ SessionCard(s model.SessionSummary) {
+	<div class="card" style="border-left:4px solid #3273dc">
+		<div class="card-content py-3">
+			<div class="is-flex is-align-items-center is-justify-content-space-between">
+				<div>
+					<p class="title is-6 mb-1">{ s.PatternName }</p>
+					<p class="is-size-7 has-text-grey">
+						{ s.SectionName } — { s.RowLabel }
+						if s.TotalRowsInSection > 0 {
+							{ fmt.Sprintf(" (%d/%d)", s.RowNumberInSection, s.TotalRowsInSection) }
+						}
+					</p>
+					<p class="is-size-7 has-text-grey">
+						{ fmt.Sprintf("%d/%d stitches", s.StitchesCompleted, s.ExpectedStitches) }
+					</p>
+				</div>
+				<a
+					class="button is-primary is-small"
+					href={ templ.SafeURL(fmt.Sprintf("/patterns/%d/work", s.PatternID)) }
+				>Resume</a>
+			</div>
+		</div>
 	</div>
 }

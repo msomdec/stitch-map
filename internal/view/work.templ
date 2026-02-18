@@ -1,0 +1,219 @@
+package view
+
+import (
+	"fmt"
+	"github.com/stitchmap/stitchmap/internal/model"
+)
+
+// WorkPage renders the full work mode page.
+templ WorkPage(state model.WorkDisplayState, email string) {
+	@Layout(LayoutData{Title: "Work Mode — " + state.PatternName, IsLoggedIn: true, UserEmail: email}) {
+		<nav class="breadcrumb" aria-label="breadcrumbs">
+			<ul>
+				<li><a href="/">Dashboard</a></li>
+				<li><a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", state.PatternID)) }>{ state.PatternName }</a></li>
+				<li class="is-active"><a>Work Mode</a></li>
+			</ul>
+		</nav>
+		<div id="work-display">
+			@WorkDisplay(state)
+		</div>
+	}
+}
+
+// WorkNoInstructionsPage shown when a pattern has no instructions yet.
+templ WorkNoInstructionsPage(pattern *model.Pattern, email string) {
+	@Layout(LayoutData{Title: "Work Mode — " + pattern.Name, IsLoggedIn: true, UserEmail: email}) {
+		<div class="box has-text-centered">
+			<p class="title is-5">{ pattern.Name }</p>
+			<p class="has-text-grey mb-4">This pattern has no stitches yet. Add instructions to rows before starting work mode.</p>
+			<a class="button is-primary" href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", pattern.ID)) }>Back to Pattern</a>
+		</div>
+	}
+}
+
+// WorkDisplay is the SSE-replaceable work mode content.
+templ WorkDisplay(state model.WorkDisplayState) {
+	<div id="work-display">
+		if state.Completed {
+			@WorkCompleteScreen(state)
+		} else {
+			@WorkActiveScreen(state)
+		}
+	</div>
+}
+
+// WorkCompleteScreen shown when all stitches are done.
+templ WorkCompleteScreen(state model.WorkDisplayState) {
+	<div class="box has-text-centered" style="max-width:480px;margin:2rem auto">
+		<span style="font-size:4rem">🎉</span>
+		<h2 class="title is-3 mt-3">Pattern Complete!</h2>
+		<p class="subtitle is-5 has-text-grey mb-4">{ state.PatternName }</p>
+		<p class="has-text-grey mb-5">Congratulations! You've worked through every stitch.</p>
+		<div class="buttons is-centered">
+			<a class="button is-primary is-medium" href="/">Back to Dashboard</a>
+			<a class="button is-light is-medium" href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", state.PatternID)) }>View Pattern</a>
+		</div>
+	</div>
+}
+
+// WorkActiveScreen is the main work tracking UI.
+templ WorkActiveScreen(state model.WorkDisplayState) {
+	<div style="max-width:520px;margin:0 auto">
+		<!-- Section / Row context -->
+		<div class="mb-3">
+			<p class="is-size-7 has-text-grey has-text-weight-semibold is-uppercase" style="letter-spacing:0.05em">
+				{ state.SectionName }
+			</p>
+			<div class="is-flex is-align-items-baseline is-justify-content-space-between">
+				<h2 class="title is-4 mb-0">{ state.RowLabel }</h2>
+				<span class="tag is-light is-medium">
+					{ fmt.Sprintf("%d / %d", state.RowNumberInSection, state.TotalRowsInSection) }
+				</span>
+			</div>
+			if state.RowRepeatCount > 1 {
+				<p class="is-size-7 has-text-grey mt-1">
+					Repeat { fmt.Sprintf("%d of %d", state.RowRepeatIndex+1, state.RowRepeatCount) }
+				</p>
+			}
+		</div>
+
+		<!-- Stitch counter -->
+		<div class="box py-3 mb-3" style="background:#f0f4ff">
+			<div class="is-flex is-align-items-center is-justify-content-space-between">
+				<div>
+					<p class="is-size-7 has-text-grey mb-1">Stitches completed</p>
+					<p class="title is-3 mb-0">
+						{ fmt.Sprintf("%d", state.StitchesCompleted) }
+						<span class="has-text-grey is-size-5">/ { fmt.Sprintf("%d", state.ExpectedStitchCount) }</span>
+					</p>
+				</div>
+				<div style="width:80px;height:80px">
+					@stitchProgressRing(state.StitchesCompleted, state.ExpectedStitchCount)
+				</div>
+			</div>
+			if state.StitchesCompleted == state.ExpectedStitchCount && state.ExpectedStitchCount > 0 {
+				<div class="notification is-success is-light mt-2 mb-0 py-2">
+					&#x2713; Row complete! Tap advance to continue.
+				</div>
+			}
+		</div>
+
+		<!-- Current stitch detail -->
+		<div class="box py-3 mb-3">
+			<p class="is-size-7 has-text-grey mb-1">Current stitch</p>
+			if state.CurrentStitchAbbr != "" {
+				<p class="title is-4 mb-1">
+					<span class="tag is-primary is-large">{ state.CurrentStitchAbbr }</span>
+					<span class="ml-2 is-size-5 has-text-grey-dark">
+						{ fmt.Sprintf("%d of %d", state.CurrentStitchIndex+1, state.CurrentStitchCount) }
+					</span>
+				</p>
+				if state.CurrentGroupRepeatIdx > 0 || state.CurrentStitchIndex > 0 {
+					<p class="is-size-7 has-text-grey">
+						if state.CurrentGroupRepeatIdx > 0 {
+							Group repeat { fmt.Sprintf("%d", state.CurrentGroupRepeatIdx+1) }
+						}
+					</p>
+				}
+			} else {
+				<p class="has-text-grey">—</p>
+			}
+		</div>
+
+		<!-- Instruction list with current highlighted -->
+		<div class="box py-3 mb-4">
+			<p class="is-size-7 has-text-grey mb-2">Instructions</p>
+			<div class="content is-size-6" style="line-height:1.8">
+				@workInstructionLine(state.Instructions, state.CurrentInstrID, state.CurrentGroupRepeatIdx)
+			</div>
+		</div>
+
+		<!-- Advance button (large tap target) -->
+		<button
+			class="button is-primary is-fullwidth mb-3"
+			style="height:80px;font-size:1.4rem;font-weight:600"
+			data-on-click={ fmt.Sprintf("@post('/sessions/%d/advance')", state.SessionID) }
+		>
+			&#x2713; Next Stitch
+		</button>
+
+		<!-- Undo button -->
+		<button
+			class="button is-light is-fullwidth"
+			style="height:48px"
+			data-on-click={ fmt.Sprintf("@post('/sessions/%d/undo')", state.SessionID) }
+		>
+			&#x21BA; Undo
+		</button>
+
+		<div class="mt-4 has-text-centered">
+			<a href={ templ.SafeURL(fmt.Sprintf("/patterns/%d", state.PatternID)) } class="is-size-7 has-text-grey">
+				← Back to Pattern
+			</a>
+		</div>
+	</div>
+}
+
+// workInstructionLine renders instructions with the current one highlighted.
+templ workInstructionLine(instructions []model.RowInstruction, currentID int64, currentGroupRepeat int) {
+	for _, ri := range instructions {
+		if ri.IsGroup {
+			<span>
+				(
+				for j, child := range ri.Children {
+					if j > 0 {
+						,{ " " }
+					}
+					@workInstrSpan(child, currentID, currentGroupRepeat)
+				}
+				)
+				if ri.GroupRepeat > 1 {
+					<span> ×{ fmt.Sprintf("%d", ri.GroupRepeat) }</span>
+				}
+			</span>
+			{ " " }
+		} else {
+			@workInstrSpan(ri, currentID, 0)
+			{ " " }
+		}
+	}
+}
+
+// workInstrSpan renders a single (non-group) instruction, bolded if current.
+templ workInstrSpan(ri model.RowInstruction, currentID int64, currentGroupRepeat int) {
+	if ri.ID == currentID {
+		<strong class="has-text-primary" style="background:#e8f4fd;border-radius:3px;padding:0 3px">
+			{ workInstrText(ri) }
+		</strong>
+	} else {
+		<span>{ workInstrText(ri) }</span>
+	}
+}
+
+// stitchProgressRing renders a simple SVG ring showing stitch progress.
+templ stitchProgressRing(done, total int) {
+	if total > 0 {
+		<svg viewBox="0 0 36 36" style="transform:rotate(-90deg)">
+			<circle cx="18" cy="18" r="15" fill="none" stroke="#e0e0e0" stroke-width="3"></circle>
+			<circle
+				cx="18" cy="18" r="15" fill="none"
+				stroke="#3273dc" stroke-width="3"
+				stroke-dasharray={ fmt.Sprintf("%.1f 94.2", float64(done)/float64(total)*94.2) }
+				stroke-linecap="round"
+			></circle>
+		</svg>
+	}
+}
+
+// workInstrText produces short display text for an instruction (not a group).
+func workInstrText(ri model.RowInstruction) string {
+	abbr := ri.StitchAbbr
+	if abbr == "" {
+		abbr = "?"
+	}
+	if ri.Count > 1 {
+		return fmt.Sprintf("%s %d", abbr, ri.Count)
+	}
+	return abbr
+}

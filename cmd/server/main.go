@@ -83,6 +83,11 @@ func main() {
 	authed.HandleFunc("POST /rows/{id}/move-up", handler.RowMoveUp(db))
 	authed.HandleFunc("POST /rows/{id}/move-down", handler.RowMoveDown(db))
 
+	// Work session routes.
+	authed.HandleFunc("GET /patterns/{id}/work", handler.WorkStart(db))
+	authed.HandleFunc("POST /sessions/{id}/advance", handler.WorkAdvance(db))
+	authed.HandleFunc("POST /sessions/{id}/undo", handler.WorkUndo(db))
+
 	// Instruction routes.
 	authed.HandleFunc("GET /rows/{id}/instructions/new", handler.InstructionNewForm(db))
 	authed.HandleFunc("GET /rows/{id}/instructions/group/new", handler.InstructionGroupNewForm(db))
